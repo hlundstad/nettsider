@@ -1,0 +1,51 @@
+name: Publiser nettsidene
+
+# Pusher kun de ferdige filene til det offentlige repoet hlundstad/hlundstad.github.io
+# som én ny rotløs commit (force-push). Kilden og historikken blir her i det private repoet.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - ".github/**"
+      - "README.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publiser
+  cancel-in-progress: true
+
+jobs:
+  publiser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Publiser til hlundstad/hlundstad.github.io
+        env:
+          PUBLISER_TOKEN: ${{ secrets.PUBLISER_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PUBLISER_TOKEN}" ]; then
+            echo "::error::Secret PUBLISER_TOKEN mangler"
+            exit 1
+          fi
+          ut="$RUNNER_TEMP/ut"
+          rm -rf "$ut"
+          mkdir "$ut"
+          # Kopier alt untatt .git, .github og repo-interne filer
+          tar --exclude=./.git --exclude=./.github --exclude=./README.md -cf - . | tar -xf - -C "$ut"
+          touch "$ut/.nojekyll"
+          cd "$ut"
+          git init -q -b main
+          git config user.name "Publiser"
+          git config user.email "noreply@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Publiser"
+          git remote add origin "https://x-access-token:${PUBLISER_TOKEN}@github.com/hlundstad/hlundstad.github.io.git"
+          git push --force origin main
